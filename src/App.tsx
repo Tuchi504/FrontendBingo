@@ -4,6 +4,7 @@ import { PrivateRoute } from './components/private-route';
 import { Login } from './pages/login';
 import { Dashboard } from './pages/dashboard';
 import { Scan } from './pages/scan';
+import { ParticipantDetail } from './pages/participant-detail';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route element={<PrivateRoute />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/scan" element={<Scan />} />
+            <Route path="/participant/:id" element={<ParticipantDetail />} />
             {/* Las demás rutas se irán enlazando conforme se creen sus pantallas correspondientes */}
           </Route>
 
