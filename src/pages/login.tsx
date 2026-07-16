@@ -8,26 +8,29 @@ export const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Validaciones del cliente
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  const validateEmail = (val: string) => {
-    if (!val) {
-      setEmailError('El correo electrónico es obligatorio');
+  const validateUsername = (val: string) => {
+    if (!val.trim()) {
+      setUsernameError('El usuario o correo electrónico es obligatorio');
       return false;
     }
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!regex.test(val)) {
-      setEmailError('El formato de correo no es válido');
-      return false;
+    // Si contiene '@', validar formato de correo
+    if (val.includes('@')) {
+      const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!regex.test(val.trim())) {
+        setUsernameError('El formato de correo no es válido');
+        return false;
+      }
     }
-    setEmailError(null);
+    setUsernameError(null);
     return true;
   };
 
@@ -48,18 +51,18 @@ export const Login: React.FC = () => {
     e.preventDefault();
     setError(null);
 
-    const isEmailValid = validateEmail(email);
+    const isUsernameValid = validateUsername(username);
     const isPasswordValid = validatePassword(password);
 
-    if (!isEmailValid || !isPasswordValid) return;
+    if (!isUsernameValid || !isPasswordValid) return;
 
     setIsSubmitting(true);
     try {
-      const success = await login(email, password);
+      const success = await login(username, password);
       if (success) {
         navigate('/', { replace: true });
       } else {
-        setError('Correo electrónico o contraseña incorrectos.');
+        setError('Usuario / Correo o contraseña incorrectos.');
       }
     } catch {
       setError('Ocurrió un error al intentar iniciar sesión. Por favor intenta de nuevo.');
@@ -91,31 +94,31 @@ export const Login: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Correo Electrónico */}
+          {/* Nombre de Usuario / Correo */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Correo Electrónico
+              Usuario / Correo Electrónico
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400">
                 <Mail size={20} />
               </span>
               <input
-                type="email"
-                value={email}
+                type="text"
+                value={username}
                 onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (emailError) validateEmail(e.target.value);
+                  setUsername(e.target.value);
+                  if (usernameError) validateUsername(e.target.value);
                 }}
-                onBlur={() => validateEmail(email)}
-                placeholder="usuario@ejemplo.com"
+                onBlur={() => validateUsername(username)}
+                placeholder="usuario o usuario@ejemplo.com"
                 className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-gray-850 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
-                  emailError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
+                  usernameError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
                 }`}
               />
             </div>
-            {emailError && (
-              <p className="mt-2 text-xs text-red-600">{emailError}</p>
+            {usernameError && (
+              <p className="mt-2 text-xs text-red-600">{usernameError}</p>
             )}
           </div>
 

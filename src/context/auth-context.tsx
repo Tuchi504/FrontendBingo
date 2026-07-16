@@ -3,17 +3,22 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 
 interface User {
-  email: string;
-  role: string;
+  username: string;
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (emailOrUsername: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
+}
+
+interface LoginResponse {
+  username: string;
+  access_token: string;
+  refresh_token: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,8 +45,6 @@ const getInitialState = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState(getInitialState);
-  // Al inicializar el estado síncronamente, no ocupamos un useEffect para setIsLoading(false).
-  // Iniciamos directamente en false si recupera los datos o si está vacío.
   const [isLoading] = useState<boolean>(false);
 
   const logout = React.useCallback(() => {
@@ -73,27 +76,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [logout]);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
+  const login = async (emailOrUsername: string, password: string): Promise<boolean> => {
+    try {
+      const response = await api.post<LoginResponse>('/auth/login/', {
+        username: emailOrUsername.trim(),
+        password,
+      });
 
-    if (email === 'admin@aeisc.org' && password === '12345678') {
-      const mockToken = 'mock-jwt-token-xyz-12345';
-      const mockUser = { email, role: 'staff' };
+      const { access_token, username } = response.data;
+      const loggedUser = { username };
 
-      localStorage.setItem('auth_token', mockToken);
-      localStorage.setItem('auth_user', JSON.stringify(mockUser));
+      localStorage.setItem('auth_token', access_token);
+      localStorage.setItem('auth_user', JSON.stringify(loggedUser));
 
       setState({
         isAuthenticated: true,
-        token: mockToken,
-        user: mockUser,
+        token: access_token,
+        user: loggedUser,
       });
 
-      api.defaults.headers.common['Authorization'] = `Bearer ${mockToken}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       return true;
+    } catch (err) {
+      console.error('Error de login en API:', err);
+      return false;
     }
-
-    return false;
   };
 
   return (
