@@ -14,6 +14,18 @@ export const MainLayout: React.FC = () => {
     navigate('/login', { replace: true });
   };
 
+  // Referencia al contenedor principal para reiniciar su scroll al cambiar de vista
+  const mainContentRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    // Restaurar scroll de la ventana
+    window.scrollTo(0, 0);
+    // Restaurar scroll de la sección principal si tiene su propio scroll
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo(0, 0);
+    }
+  }, [location.pathname]);
+
   const navItems = [
     { path: '/', label: 'Escáner', icon: QrCode },
     { path: '/participants', label: 'Participantes', icon: Users },
@@ -45,7 +57,7 @@ export const MainLayout: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto px-4 py-6 pb-28">
+      <main ref={mainContentRef} className="flex-1 overflow-y-auto px-4 py-6 pb-28">
         <div className="mx-auto max-w-md">
           <Outlet />
         </div>

@@ -6,6 +6,7 @@ import { Dashboard } from './pages/dashboard';
 import { Scan } from './pages/scan';
 import { ParticipantDetail } from './pages/participant-detail';
 import { ParticipantsList } from './pages/participants-list';
+import { CreateParticipant } from './pages/create-participant';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/scan" element={<Scan />} />
             <Route path="/participant/:id" element={<ParticipantDetail />} />
             <Route path="/participants" element={<ParticipantsList />} />
+            <Route path="/create" element={<CreateParticipant />} />
             {/* Las demás rutas se irán enlazando conforme se creen sus pantallas correspondientes */}
           </Route>
 

@@ -84,6 +84,34 @@ export const ParticipantDetail: React.FC = () => {
       setTimeout(() => setCopiedLink(false), 2000);
     });
   };
+  const handleConfirmPayment = () => {
+    const updated: Participant = {
+      ...participant,
+      isPaid: true
+    };
+    updateParticipant(updated);
+    setParticipant(updated);
+  };
+
+  const handleRevertPayment = () => {
+    const updated: Participant = {
+      ...participant,
+      isPaid: false
+    };
+    updateParticipant(updated);
+    setParticipant(updated);
+  };
+
+  const handleRevertDelivery = () => {
+    const updated: Participant = {
+      ...participant,
+      isDelivered: false,
+      deliveredBy: null,
+      deliveredAt: null
+    };
+    updateParticipant(updated);
+    setParticipant(updated);
+  };
 
   return (
     <div className="space-y-5 animate-fade-in pb-12">
@@ -106,7 +134,7 @@ export const ParticipantDetail: React.FC = () => {
             <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-1">
               Nombre del Participante
             </span>
-            <h1 className="text-xl font-bold text-gray-850 leading-tight">
+            <h1 className="text-xl font-bold text-gray-855 leading-tight">
               {participant.name}
             </h1>
           </div>
@@ -132,31 +160,52 @@ export const ParticipantDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Tarjeta 2: Estado de Entrega */}
-      <div className="rounded-3xl border border-gray-150 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex flex-col items-center justify-center text-center">
-        <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-3">
-          Estado de Entrega
-        </span>
+      {/* Grid de Dos Columnas: Estado de Pago y Estado de Entrega */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Tarjeta Pago */}
+        <div className="rounded-3xl border border-gray-150 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex flex-col items-center justify-center text-center">
+          <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-2.5">
+            Estado de Pago
+          </span>
+          {participant.isPaid ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-600">
+              <CheckCircle2 size={12} className="stroke-[2.5]" />
+              PAGADO
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-[11px] font-bold text-rose-600">
+              <XCircle size={12} className="stroke-[2.5]" />
+              PENDIENTE
+            </span>
+          )}
+        </div>
 
-        {participant.isDelivered ? (
-          <div className="space-y-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-4 py-1.5 text-xs font-bold text-emerald-600">
-              <CheckCircle2 size={14} className="stroke-[2.5]" />
+        {/* Tarjeta Entrega */}
+        <div className="rounded-3xl border border-gray-150 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex flex-col items-center justify-center text-center">
+          <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-2.5">
+            Estado de Entrega
+          </span>
+          {participant.isDelivered ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-600">
+              <CheckCircle2 size={12} className="stroke-[2.5]" />
               ENTREGADO
             </span>
-            <div className="text-[11px] text-gray-400 leading-normal">
-              Entregado por: <span className="font-semibold text-gray-600">{participant.deliveredBy}</span>
-              <span className="block mt-0.5">{participant.deliveredAt}</span>
-            </div>
-          </div>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-4 py-1.5 text-xs font-bold text-rose-600">
-            <XCircle size={14} className="stroke-[2.5]" />
-            NO ENTREGADO
-          </span>
-        )}
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-[11px] font-bold text-rose-600">
+              <XCircle size={12} className="stroke-[2.5]" />
+              NO ENTREGADO
+            </span>
+          )}
+        </div>
       </div>
 
+      {/* Subdetalles de la entrega si ya ocurrió */}
+      {participant.isDelivered && (
+        <div className="rounded-3xl border border-[#e2e8f0] bg-gray-50/50 px-6 py-4 text-center text-xs text-gray-450 leading-normal">
+          Entregado por: <span className="font-semibold text-gray-650">{participant.deliveredBy}</span>
+          <span className="block mt-0.5 font-medium">{participant.deliveredAt}</span>
+        </div>
+      )}
 
       {/* Acordeón: Información Adicional */}
       <div className="rounded-3xl border border-gray-150 bg-white overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
@@ -198,13 +247,33 @@ export const ParticipantDetail: React.FC = () => {
 
       {/* Acciones del pie de página */}
       <div className="space-y-3 pt-4">
-        {participant.isDelivered ? (
+        {/* Lógica de Pago Reversible */}
+        {participant.isPaid ? (
           <button
-            disabled
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-100 border border-gray-200 py-4 text-base font-semibold text-gray-400 cursor-not-allowed"
+            onClick={handleRevertPayment}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-50 border border-rose-250 py-4 text-base font-semibold text-rose-600 transition-all hover:bg-rose-100 hover:text-rose-700 active:scale-[0.99]"
+          >
+            <XCircle size={20} />
+            Deshacer Pago
+          </button>
+        ) : (
+          <button
+            onClick={handleConfirmPayment}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 text-base font-semibold text-white transition-all hover:bg-emerald-700 active:scale-[0.99] shadow-[0_4px_12px_rgba(16,185,129,0.2)] animate-pulse"
           >
             <CheckCircle2 size={20} />
-            Entrega Completada
+            Confirmar Pago
+          </button>
+        )}
+
+        {/* Lógica de Entrega Reversible */}
+        {participant.isDelivered ? (
+          <button
+            onClick={handleRevertDelivery}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-50 border border-rose-250 py-4 text-base font-semibold text-rose-600 transition-all hover:bg-rose-100 hover:text-rose-700 active:scale-[0.99]"
+          >
+            <XCircle size={20} />
+            Deshacer Entrega
           </button>
         ) : (
           <button
