@@ -72,8 +72,12 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f8fafc] px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#e2e8f0]">
+    <div className="flex min-h-screen flex-col items-center justify-between bg-[#f8fafc] px-4 py-8 overflow-y-auto">
+      {/* Espaciador arriba para centrar en pantallas grandes */}
+      <div className="hidden sm:block" />
+
+      {/* Contenedor de la Tarjeta */}
+      <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#e2e8f0] my-auto animate-fade-in">
         
         {/* Logo e Identidad */}
         <div className="flex flex-col items-center mb-8">
@@ -88,7 +92,7 @@ export const Login: React.FC = () => {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-2xl bg-red-50 p-4 text-sm text-red-600 border border-red-100">
+          <div className="mb-6 rounded-2xl bg-red-50 p-4 text-sm text-red-600 border border-red-100 animate-shake">
             {error}
           </div>
         )}
@@ -112,13 +116,13 @@ export const Login: React.FC = () => {
                 }}
                 onBlur={() => validateUsername(username)}
                 placeholder="usuario o usuario@ejemplo.com"
-                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-gray-850 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
+                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-gray-855 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
                   usernameError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
                 }`}
               />
             </div>
             {usernameError && (
-              <p className="mt-2 text-xs text-red-600">{usernameError}</p>
+              <p className="mt-2 text-xs text-red-650">{usernameError}</p>
             )}
           </div>
 
@@ -140,13 +144,13 @@ export const Login: React.FC = () => {
                 }}
                 onBlur={() => validatePassword(password)}
                 placeholder="••••••••"
-                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-gray-850 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
+                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-gray-855 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
                   passwordError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
                 }`}
               />
             </div>
             {passwordError && (
-              <p className="mt-2 text-xs text-red-600">{passwordError}</p>
+              <p className="mt-2 text-xs text-red-650">{passwordError}</p>
             )}
           </div>
 
@@ -164,6 +168,12 @@ export const Login: React.FC = () => {
           </button>
         </form>
       </div>
+
+      {/* Footer de Derechos Reservados */}
+      <footer className="w-full text-center text-xs text-gray-450 mt-8 shrink-0">
+        <p>© {new Date().getFullYear()} AEISC. Todos los derechos reservados.</p>
+        <p className="mt-1 text-[10px] text-gray-400">Asociación de Estudiantes de Ingeniería en Sistemas Computacionales</p>
+      </footer>
     </div>
   );
 };

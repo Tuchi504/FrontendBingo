@@ -96,8 +96,12 @@ export const ParticipantDetail: React.FC = () => {
   }
 
   const handleCopyLink = () => {
-    const fakeLink = `${window.location.origin}/participant/${participant.id}`;
-    navigator.clipboard.writeText(fakeLink).then(() => {
+    // Si la URL del código QR es relativa, le anteponemos el servidor de la API
+    const qrUrl = participant.qr_code?.startsWith('http')
+      ? participant.qr_code
+      : `${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api$/, '')}${participant.qr_code}`;
+
+    navigator.clipboard.writeText(qrUrl || '').then(() => {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     });
@@ -362,16 +366,34 @@ export const ParticipantDetail: React.FC = () => {
             {/* Botones de acción del Modal */}
             <div className="space-y-2.5">
               <div className="grid grid-cols-2 gap-2.5">
-                <a
-                  href={participant.qr_code?.startsWith('http') ? participant.qr_code : `${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api$/, '')}${participant.qr_code}`}
-                  download={`QR_${participant.telefono}.png`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={() => {
+                    const qrUrl = participant.qr_code?.startsWith('http')
+                      ? participant.qr_code
+                      : `${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api$/, '')}${participant.qr_code}`;
+                    
+                    fetch(qrUrl || '')
+                      .then(response => response.blob())
+                      .then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `QR_${participant.telefono}.png`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        window.URL.revokeObjectURL(url);
+                      })
+                      .catch(() => {
+                        // Fallback si falla CORS (abre en pestaña nueva)
+                        window.open(qrUrl || '', '_blank');
+                      });
+                  }}
                   className="flex items-center justify-center gap-1.5 rounded-2xl bg-gray-50 border border-gray-200 py-3 text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
                 >
                   <Download size={14} />
                   Descargar QR
-                </a>
+                </button>
                 <button
                   onClick={() => {
                     if (navigator.share) {
