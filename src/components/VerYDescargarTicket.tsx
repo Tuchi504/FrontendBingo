@@ -95,19 +95,11 @@ export const VerYDescargarTicket: React.FC<VerYDescargarTicketProps> = ({ partic
     setTicketPreviewUrl(null);
   };
 
-  const descargarYCompartir = (e: React.MouseEvent) => {
+  const descargarYCompartir = async (e: React.MouseEvent) => {
     e.stopPropagation(); // 👈 también aquí, por si acaso
     if (!ticketPreviewUrl) return;
 
-    const enlaceDescarga = document.createElement('a');
-    enlaceDescarga.href = ticketPreviewUrl;
     const nombreArchivo = `ticket_${participante.nombre.toLowerCase().replace(/\s+/g, '_')}.png`;
-    enlaceDescarga.download = nombreArchivo;
-
-    document.body.appendChild(enlaceDescarga);
-    enlaceDescarga.click();
-    document.body.removeChild(enlaceDescarga);
-
     const mensajeTexto = `🎉 ¡EL GRAN DÍA SE ACERCA! 🤩
 
 ¿Listos para cantar ¡BINGO! y llevarse premios increíbles? 🎁✨ Aquí te dejamos toda la información clave para que no te pierdas de nada este sábado 18 de julio:
@@ -123,11 +115,50 @@ Para poder ingresar y asignarte tus cartones, lleva a mano tu comprobante/ticket
     // 👇 Ajusta el código de país si tus participantes no son de Honduras
     const numeroLimpio = participante.telefono.replace(/\D/g, '');
     const numeroConCodigo = numeroLimpio.startsWith('504') ? numeroLimpio : `504${numeroLimpio}`;
-    const urlWhatsapp = `https://wa.me/${numeroConCodigo}?text=${encodeURIComponent(mensajeTexto)}`;
 
+    // Convertimos el dataURL del canvas en un archivo real, necesario para poder "compartirlo"
+    const res = await fetch(ticketPreviewUrl);
+    const blob = await res.blob();
+    const archivoTicket = new File([blob], nombreArchivo, { type: 'image/png' });
+
+    // --- CAMINO 1: Web Share API (celulares) ---
+    // Esto abre el menú NATIVO de compartir del sistema operativo, donde el usuario
+    // elige WhatsApp y la imagen se adjunta automáticamente junto con el texto.
+    // El link wa.me NUNCA puede hacer esto, por eso antes la imagen no se adjuntaba.
+    if (navigator.canShare && navigator.canShare({ files: [archivoTicket] })) {
+      try {
+        await navigator.share({
+          files: [archivoTicket],
+          text: mensajeTexto,
+          title: 'Ticket Bingo AEIS',
+        });
+        setTicketPreviewUrl(null);
+        setEnviado(true);
+        return;
+      } catch (err) {
+        // El usuario cerró el menú de compartir sin elegir nada: no hacemos nada más
+        if ((err as Error).name === 'AbortError') return;
+        console.error('Error al compartir:', err);
+        // Si falla por otra razón, seguimos al fallback de abajo
+      }
+    }
+
+    // --- CAMINO 2: Fallback para computadora (no existe menú nativo de compartir) ---
+    // Descargamos la imagen y abrimos el chat de WhatsApp con el texto ya escrito;
+    // el usuario tiene que adjuntar la imagen manualmente (clip 📎 > Documento/Foto > Descargas).
+    const enlaceDescarga = document.createElement('a');
+    enlaceDescarga.href = ticketPreviewUrl;
+    enlaceDescarga.download = nombreArchivo;
+    document.body.appendChild(enlaceDescarga);
+    enlaceDescarga.click();
+    document.body.removeChild(enlaceDescarga);
+
+    alert('El ticket se descargó a tu computadora. Se abrirá WhatsApp con el mensaje listo — solo adjunta la imagen descargada usando el clip 📎.');
+
+    const urlWhatsapp = `https://wa.me/${numeroConCodigo}?text=${encodeURIComponent(mensajeTexto)}`;
     window.open(urlWhatsapp, '_blank');
     setTicketPreviewUrl(null);
-    setEnviado(true); // 👈 marca como enviado para pintar el ícono
+    setEnviado(true);
   };
 
   return (
