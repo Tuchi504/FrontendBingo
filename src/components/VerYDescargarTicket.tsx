@@ -18,6 +18,7 @@ const URL_PLANTILLA_FONDO = "https://res.cloudinary.com/pwipm80z/image/upload/v1
 
 export const VerYDescargarTicket: React.FC<VerYDescargarTicketProps> = ({ participante, urlQrCloudinary }) => {
   const [ticketPreviewUrl, setTicketPreviewUrl] = useState<string | null>(null);
+  const [ticketBlob, setTicketBlob] = useState<Blob | null>(null); // 👈 nuevo: el archivo ya optimizado, listo para descargar/enviar
   const [generando, setGenerando] = useState(false);
   const [enviado, setEnviado] = useState(false); // 👈 nuevo: para pintar el ícono al enviar
 
@@ -78,28 +79,58 @@ export const VerYDescargarTicket: React.FC<VerYDescargarTicketProps> = ({ partic
     }
   };
 
+  // 👇 NUEVO: reduce la resolución y comprime a JPEG para que el archivo pese poco.
+  // El canvas original se genera a 3600x1800 (para que el texto se vea nítido al dibujar),
+  // pero para ver/enviar el ticket no hace falta esa resolución ni el formato PNG (sin comprimir).
+  const exportarOptimizado = (canvasOriginal: HTMLCanvasElement): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const ANCHO_FINAL = 1600; // suficiente para verse nítido en cualquier celular/pantalla
+      const escala = ANCHO_FINAL / canvasOriginal.width;
+
+      const canvasFinal = document.createElement('canvas');
+      canvasFinal.width = ANCHO_FINAL;
+      canvasFinal.height = canvasOriginal.height * escala;
+
+      const ctxFinal = canvasFinal.getContext('2d');
+      if (!ctxFinal) return resolve(null);
+
+      // Suaviza el redimensionado para que no se vea "pixeleado"
+      ctxFinal.imageSmoothingEnabled = true;
+      ctxFinal.imageSmoothingQuality = 'high';
+      ctxFinal.drawImage(canvasOriginal, 0, 0, canvasFinal.width, canvasFinal.height);
+
+      // JPEG con 85% de calidad: se ve prácticamente igual, pero pesa una fracción de un PNG
+      canvasFinal.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85);
+    });
+  };
+
   const verVistaPrevia = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Evita que el click abra los detalles del participante
     setGenerando(true);
     const canvas = await generarCanvasCompleto();
-    setGenerando(false);
 
     if (canvas) {
-      const previewUrl = canvas.toDataURL('image/png');
-      setTicketPreviewUrl(previewUrl);
+      const blob = await exportarOptimizado(canvas);
+      if (blob) {
+        setTicketBlob(blob);
+        setTicketPreviewUrl(URL.createObjectURL(blob)); // 👈 mucho más liviano que un dataURL base64
+      }
     }
+    setGenerando(false);
   };
 
   const cerrarModal = (e: React.MouseEvent) => {
     e.stopPropagation(); // 👈 CLAVE: esto es lo que faltaba
+    if (ticketPreviewUrl) URL.revokeObjectURL(ticketPreviewUrl); // libera memoria
     setTicketPreviewUrl(null);
+    setTicketBlob(null);
   };
 
   const descargarYCompartir = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // 👈 también aquí, por si acaso
-    if (!ticketPreviewUrl) return;
+    e.stopPropagation();
+    if (!ticketPreviewUrl || !ticketBlob) return;
 
-    const nombreArchivo = `ticket_${participante.nombre.toLowerCase().replace(/\s+/g, '_')}.png`;
+    const nombreArchivo = `ticket_${participante.nombre.toLowerCase().replace(/\s+/g, '_')}.jpg`;
     const mensajeTexto = `🎉 ¡EL GRAN DÍA SE ACERCA! 🤩
 
 ¿Listos para cantar ¡BINGO! y llevarse premios increíbles? 🎁✨ Aquí te dejamos toda la información clave para que no te pierdas de nada este sábado 18 de julio:
@@ -116,48 +147,28 @@ Para poder ingresar y asignarte tus cartones, lleva a mano tu comprobante/ticket
     const numeroLimpio = participante.telefono.replace(/\D/g, '');
     const numeroConCodigo = numeroLimpio.startsWith('504') ? numeroLimpio : `504${numeroLimpio}`;
 
-    // Convertimos el dataURL del canvas en un archivo real, necesario para poder "compartirlo"
-    const res = await fetch(ticketPreviewUrl);
-    const blob = await res.blob();
-    const archivoTicket = new File([blob], nombreArchivo, { type: 'image/png' });
-
-    // --- CAMINO 1: Web Share API (celulares) ---
-    // Esto abre el menú NATIVO de compartir del sistema operativo, donde el usuario
-    // elige WhatsApp y la imagen se adjunta automáticamente junto con el texto.
-    // El link wa.me NUNCA puede hacer esto, por eso antes la imagen no se adjuntaba.
-    if (navigator.canShare && navigator.canShare({ files: [archivoTicket] })) {
-      try {
-        await navigator.share({
-          files: [archivoTicket],
-          text: mensajeTexto,
-          title: 'Ticket Bingo AEIS',
-        });
-        setTicketPreviewUrl(null);
-        setEnviado(true);
-        return;
-      } catch (err) {
-        // El usuario cerró el menú de compartir sin elegir nada: no hacemos nada más
-        if ((err as Error).name === 'AbortError') return;
-        console.error('Error al compartir:', err);
-        // Si falla por otra razón, seguimos al fallback de abajo
-      }
-    }
-
-    // --- CAMINO 2: Fallback para computadora (no existe menú nativo de compartir) ---
-    // Descargamos la imagen y abrimos el chat de WhatsApp con el texto ya escrito;
-    // el usuario tiene que adjuntar la imagen manualmente (clip 📎 > Documento/Foto > Descargas).
+    // 1) Descargamos la imagen (queda en la galería/recientes del celular)
+    const urlDescarga = URL.createObjectURL(ticketBlob); // usamos el blob ya optimizado directamente
     const enlaceDescarga = document.createElement('a');
-    enlaceDescarga.href = ticketPreviewUrl;
+    enlaceDescarga.href = urlDescarga;
     enlaceDescarga.download = nombreArchivo;
     document.body.appendChild(enlaceDescarga);
     enlaceDescarga.click();
     document.body.removeChild(enlaceDescarga);
+    URL.revokeObjectURL(urlDescarga);
 
-    alert('El ticket se descargó a tu computadora. Se abrirá WhatsApp con el mensaje listo — solo adjunta la imagen descargada usando el clip 📎.');
+    // 2) Abrimos el chat de ESA persona en específico, con el texto ya listo.
+    //    WhatsApp/los navegadores no permiten adjuntar el archivo automáticamente aquí
+    //    (restricción de seguridad para evitar spam automatizado), así que queda 1 solo
+    //    toque manual: el clip 📎 y elegir la foto más reciente.
+    alert(`Ticket descargado. Se abrirá el chat de ${participante.nombre} con el mensaje listo — solo toca el clip 📎 y elige la foto más reciente para adjuntarla.`);
 
     const urlWhatsapp = `https://wa.me/${numeroConCodigo}?text=${encodeURIComponent(mensajeTexto)}`;
     window.open(urlWhatsapp, '_blank');
+
+    URL.revokeObjectURL(ticketPreviewUrl); // libera memoria del preview también
     setTicketPreviewUrl(null);
+    setTicketBlob(null);
     setEnviado(true);
   };
 
