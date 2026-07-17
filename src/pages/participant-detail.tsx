@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
   User, 
@@ -12,39 +13,74 @@ import {
   Share2,
   Copy,
   Check,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
-import { getParticipants, updateParticipant } from '../services/mock-data';
-import type { Participant } from '../services/mock-data';
+import { api } from '../services/api';
+
+// Esquema del participante devuelto por la API en español
+interface DjangoParticipant {
+  id: string;
+  nombre: string;
+  telefono: string;
+  carrera?: string;
+  no_cuenta?: string;
+  correo?: string;
+  pagado: boolean;
+  cartones: number;
+  entregado: boolean;
+  fecha_entrega?: string;
+  entregado_por?: {
+    username: string;
+    name?: string;
+  } | null;
+  qr_code?: string;
+  correo_enviado?: boolean;
+}
 
 export const ParticipantDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [participant, setParticipant] = useState<Participant | null>(() => {
-    if (id) {
-      const list = getParticipants();
-      return list.find(p => p.id === id || p.id === decodeURIComponent(id)) || null;
-    }
-    return null;
-  });
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Sincronizar el estado del participante si el ID en la URL cambia
-  useEffect(() => {
-    if (id) {
-      const list = getParticipants();
-      const found = list.find(p => p.id === id || p.id === decodeURIComponent(id));
-      if (found) {
-        /* eslint-disable-next-line react-hooks/set-state-in-effect */
-        setParticipant(found);
-      }
-    }
-  }, [id]);
+  // Fetcher del participante por id
+  const fetchParticipantDetail = async (pId: string) => {
+    const response = await api.get<DjangoParticipant>(`/participantes/${pId}/`);
+    return response.data;
+  };
 
-  if (!participant) {
+  // hook useQuery
+  const { data: participant, isLoading, isError } = useQuery({
+    queryKey: ['participant', id],
+    queryFn: () => fetchParticipantDetail(id || ''),
+    enabled: !!id,
+  });
+
+  // Mutación para alternar el estado de entrega (reversible por backend)
+  const deliverMutation = useMutation({
+    mutationFn: async (pId: string) => {
+      const response = await api.post(`/participantes/${pId}/entregar/`);
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidar caché del participante para recargar los datos actualizados
+      queryClient.invalidateQueries({ queryKey: ['participant', id] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0071ba]" />
+      </div>
+    );
+  }
+
+  if (isError || !participant) {
     return (
       <div className="text-center py-12">
         <p className="text-red-500 font-semibold mb-4">Participante no encontrado</p>
@@ -59,24 +95,6 @@ export const ParticipantDetail: React.FC = () => {
     );
   }
 
-  const handleConfirmDelivery = () => {
-    const updated: Participant = {
-      ...participant,
-      isDelivered: true,
-      deliveredBy: 'staff_user_1', // Simulamos el usuario actual del staff
-      deliveredAt: new Date().toLocaleString('es-HN', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      })
-    };
-    updateParticipant(updated);
-    setParticipant(updated);
-  };
-
   const handleCopyLink = () => {
     const fakeLink = `${window.location.origin}/participant/${participant.id}`;
     navigator.clipboard.writeText(fakeLink).then(() => {
@@ -84,33 +102,27 @@ export const ParticipantDetail: React.FC = () => {
       setTimeout(() => setCopiedLink(false), 2000);
     });
   };
-  const handleConfirmPayment = () => {
-    const updated: Participant = {
-      ...participant,
-      isPaid: true
-    };
-    updateParticipant(updated);
-    setParticipant(updated);
+
+  const handleToggleDelivery = () => {
+    deliverMutation.mutate(participant.id);
   };
 
-  const handleRevertPayment = () => {
-    const updated: Participant = {
-      ...participant,
-      isPaid: false
-    };
-    updateParticipant(updated);
-    setParticipant(updated);
-  };
-
-  const handleRevertDelivery = () => {
-    const updated: Participant = {
-      ...participant,
-      isDelivered: false,
-      deliveredBy: null,
-      deliveredAt: null
-    };
-    updateParticipant(updated);
-    setParticipant(updated);
+  // Formatear fecha
+  const formatDeliveryDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('es-HN', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return dateStr;
+    }
   };
 
   return (
@@ -135,7 +147,7 @@ export const ParticipantDetail: React.FC = () => {
               Nombre del Participante
             </span>
             <h1 className="text-xl font-bold text-gray-855 leading-tight">
-              {participant.name}
+              {participant.nombre}
             </h1>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#00a0fe]/10 text-[#00a0fe]">
@@ -148,36 +160,29 @@ export const ParticipantDetail: React.FC = () => {
             <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-0.5">
               Teléfono
             </span>
-            <span className="text-sm font-semibold text-gray-700">{participant.phone}</span>
+            <span className="text-sm font-semibold text-gray-700">{participant.telefono}</span>
           </div>
           
           <div>
             <span className="text-[10px] font-bold text-[#0071ba] tracking-wider uppercase block mb-0.5">
               Cartones Adquiridos
             </span>
-            <span className="text-lg font-bold text-[#0071ba]">{participant.cardsCount}</span>
+            <span className="text-lg font-bold text-[#0071ba]">{participant.cartones}</span>
           </div>
         </div>
       </div>
 
       {/* Grid de Dos Columnas: Estado de Pago y Estado de Entrega */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Tarjeta Pago */}
+        {/* Tarjeta Pago (Estática Siempre Pagado) */}
         <div className="rounded-3xl border border-gray-150 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex flex-col items-center justify-center text-center">
           <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-2.5">
             Estado de Pago
           </span>
-          {participant.isPaid ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-600">
-              <CheckCircle2 size={12} className="stroke-[2.5]" />
-              PAGADO
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-[11px] font-bold text-rose-600">
-              <XCircle size={12} className="stroke-[2.5]" />
-              PENDIENTE
-            </span>
-          )}
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-600">
+            <CheckCircle2 size={12} className="stroke-[2.5]" />
+            PAGADO
+          </span>
         </div>
 
         {/* Tarjeta Entrega */}
@@ -185,7 +190,7 @@ export const ParticipantDetail: React.FC = () => {
           <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-2.5">
             Estado de Entrega
           </span>
-          {participant.isDelivered ? (
+          {participant.entregado ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-600">
               <CheckCircle2 size={12} className="stroke-[2.5]" />
               ENTREGADO
@@ -200,10 +205,10 @@ export const ParticipantDetail: React.FC = () => {
       </div>
 
       {/* Subdetalles de la entrega si ya ocurrió */}
-      {participant.isDelivered && (
+      {participant.entregado && (
         <div className="rounded-3xl border border-[#e2e8f0] bg-gray-50/50 px-6 py-4 text-center text-xs text-gray-450 leading-normal">
-          Entregado por: <span className="font-semibold text-gray-650">{participant.deliveredBy}</span>
-          <span className="block mt-0.5 font-medium">{participant.deliveredAt}</span>
+          Entregado por: <span className="font-semibold text-gray-650">{participant.entregado_por?.name || participant.entregado_por?.username || 'Staff'}</span>
+          <span className="block mt-0.5 font-medium">{formatDeliveryDate(participant.fecha_entrega)}</span>
         </div>
       )}
 
@@ -223,23 +228,25 @@ export const ParticipantDetail: React.FC = () => {
               <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-1">
                 Correo
               </span>
-              <span className="font-medium text-gray-700">{participant.email}</span>
+              <span className="font-medium text-gray-700">{participant.correo || 'No especificado'}</span>
             </div>
             <div>
               <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-1">
-                Pagado
+                Cuenta
               </span>
-              <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${
-                participant.isPaid ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-              }`}>
-                {participant.isPaid ? 'Sí' : 'No'}
+              <span className="font-medium text-gray-700">{participant.no_cuenta || 'No especificado'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-1">
+                Carrera
               </span>
+              <span className="font-medium text-gray-700">{participant.carrera || 'No especificado'}</span>
             </div>
             <div>
               <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase block mb-1">
                 Correo enviado
               </span>
-              <span className="font-medium text-gray-700">{participant.emailSent ? 'Sí' : 'No'}</span>
+              <span className="font-medium text-gray-700">{participant.correo_enviado ? 'Sí' : 'No'}</span>
             </div>
           </div>
         )}
@@ -247,40 +254,31 @@ export const ParticipantDetail: React.FC = () => {
 
       {/* Acciones del pie de página */}
       <div className="space-y-3 pt-4">
-        {/* Lógica de Pago Reversible */}
-        {participant.isPaid ? (
+        {/* Lógica de Entrega Reversible (Llamando al endpoint de entrega) */}
+        {participant.entregado ? (
           <button
-            onClick={handleRevertPayment}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-50 border border-rose-250 py-4 text-base font-semibold text-rose-600 transition-all hover:bg-rose-100 hover:text-rose-700 active:scale-[0.99]"
+            onClick={handleToggleDelivery}
+            disabled={deliverMutation.isPending}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-50 border border-rose-250 py-4 text-base font-semibold text-rose-600 transition-all hover:bg-rose-100 hover:text-rose-700 active:scale-[0.99] disabled:opacity-70"
           >
-            <XCircle size={20} />
-            Deshacer Pago
-          </button>
-        ) : (
-          <button
-            onClick={handleConfirmPayment}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 text-base font-semibold text-white transition-all hover:bg-emerald-700 active:scale-[0.99] shadow-[0_4px_12px_rgba(16,185,129,0.2)] animate-pulse"
-          >
-            <CheckCircle2 size={20} />
-            Confirmar Pago
-          </button>
-        )}
-
-        {/* Lógica de Entrega Reversible */}
-        {participant.isDelivered ? (
-          <button
-            onClick={handleRevertDelivery}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-50 border border-rose-250 py-4 text-base font-semibold text-rose-600 transition-all hover:bg-rose-100 hover:text-rose-700 active:scale-[0.99]"
-          >
-            <XCircle size={20} />
+            {deliverMutation.isPending ? (
+              <Loader2 size={20} className="animate-spin" />
+            ) : (
+              <XCircle size={20} />
+            )}
             Deshacer Entrega
           </button>
         ) : (
           <button
-            onClick={handleConfirmDelivery}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0071ba] py-4 text-base font-semibold text-white transition-all hover:bg-[#005f9e] active:scale-[0.99] shadow-[0_4px_12px_rgba(0,113,186,0.2)]"
+            onClick={handleToggleDelivery}
+            disabled={deliverMutation.isPending}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0071ba] py-4 text-base font-semibold text-white transition-all hover:bg-[#005f9e] active:scale-[0.99] shadow-[0_4px_12px_rgba(0,113,186,0.2)] disabled:opacity-70"
           >
-            <CheckCircle2 size={20} />
+            {deliverMutation.isPending ? (
+              <Loader2 size={20} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={20} />
+            )}
             Confirmar Entrega
           </button>
         )}
@@ -313,7 +311,7 @@ export const ParticipantDetail: React.FC = () => {
             {/* Detalles del participante */}
             <div className="mb-6">
               <p className="text-sm font-semibold text-[#0071ba] mb-1">
-                Participante {participant.name}
+                Participante {participant.nombre}
               </p>
               <p className="text-[10px] text-gray-400 font-mono break-all">
                 (ID: {participant.id})
@@ -322,50 +320,70 @@ export const ParticipantDetail: React.FC = () => {
 
             {/* Código QR Centrado */}
             <div className="flex flex-col items-center justify-center p-6 border border-gray-100 rounded-3xl bg-gray-50/50 mb-6">
-              {/* Representación visual de un QR para emulación completa */}
-              <div className="h-48 w-48 bg-white border border-gray-100 rounded-2xl flex items-center justify-center p-4 shadow-sm">
-                <div className="grid grid-cols-6 grid-rows-6 gap-1 w-full h-full opacity-90">
-                  {/* Esquinas y patrones simulando estructura real de QR */}
-                  <div className="col-span-2 row-span-2 bg-gray-800 rounded-xs" />
-                  <div className="col-span-2" />
-                  <div className="col-span-2 row-span-2 bg-gray-800 rounded-xs" />
-                  
-                  <div className="col-span-2" />
-                  <div className="bg-gray-800" />
-                  <div className="bg-gray-800" />
-                  
-                  <div className="col-span-2 row-span-2 bg-gray-800 rounded-xs" />
-                  <div className="bg-gray-800" />
-                  <div className="bg-gray-800 animate-pulse" />
-                  <div className="col-span-2" />
-                  
-                  <div className="bg-gray-800" />
-                  <div className="bg-gray-850" />
-                  <div className="bg-gray-800" />
-                  <div className="bg-gray-800" />
-                  
-                  <div className="col-span-6 flex items-center justify-center text-[10px] font-bold text-gray-400 tracking-widest pt-2">
-                    QR SIMULADO
+              {/* Cargar imagen de QR real del backend o renderizar simulador si no existe */}
+              {participant.qr_code ? (
+                <img 
+                  src={participant.qr_code.startsWith('http') ? participant.qr_code : `${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api$/, '')}${participant.qr_code}`} 
+                  alt={`QR de ${participant.nombre}`}
+                  className="h-48 w-48 object-contain bg-white p-2 rounded-2xl shadow-sm border border-gray-100"
+                />
+              ) : (
+                <div className="h-48 w-48 bg-white border border-gray-100 rounded-2xl flex items-center justify-center p-4 shadow-sm">
+                  <div className="grid grid-cols-6 grid-rows-6 gap-1 w-full h-full opacity-90">
+                    <div className="col-span-2 row-span-2 bg-gray-800 rounded-xs" />
+                    <div className="col-span-2" />
+                    <div className="col-span-2 row-span-2 bg-gray-800 rounded-xs" />
+                    
+                    <div className="col-span-2" />
+                    <div className="bg-gray-800" />
+                    <div className="bg-gray-800" />
+                    
+                    <div className="col-span-2 row-span-2 bg-gray-800 rounded-xs" />
+                    <div className="bg-gray-800" />
+                    <div className="bg-gray-800 animate-pulse" />
+                    <div className="col-span-2" />
+                    
+                    <div className="bg-gray-800" />
+                    <div className="bg-gray-850" />
+                    <div className="bg-gray-800" />
+                    <div className="bg-gray-800" />
+                    
+                    <div className="col-span-6 flex items-center justify-center text-[10px] font-bold text-gray-400 tracking-widest pt-2">
+                      QR AUTOMÁTICO
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               <p className="text-[10px] text-gray-400 text-center mt-3 max-w-[240px] leading-relaxed">
-                Este código QR contiene el ID del participante y puede ser escaneado para acceder rápidamente a sus datos.
+                Este código QR puede ser escaneado por el staff para confirmar la entrega y validar al participante.
               </p>
             </div>
 
             {/* Botones de acción del Modal */}
             <div className="space-y-2.5">
               <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => alert('Descarga de QR simulada.')}
+                <a
+                  href={participant.qr_code?.startsWith('http') ? participant.qr_code : `${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api$/, '')}${participant.qr_code}`}
+                  download={`QR_${participant.telefono}.png`}
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center justify-center gap-1.5 rounded-2xl bg-gray-50 border border-gray-200 py-3 text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
                 >
                   <Download size={14} />
                   Descargar QR
-                </button>
+                </a>
                 <button
-                  onClick={() => alert('Compartido simulado.')}
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Código QR de Bingo',
+                        text: `Código QR de ${participant.nombre}`,
+                        url: participant.qr_code || window.location.href,
+                      }).catch(console.error);
+                    } else {
+                      alert('La opción de compartir no es soportada en este navegador.');
+                    }
+                  }}
                   className="flex items-center justify-center gap-1.5 rounded-2xl bg-gray-50 border border-gray-200 py-3 text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
                 >
                   <Share2 size={14} />

@@ -1,20 +1,29 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Phone, Mail, Minus, Plus, CreditCard, Gift, Loader2 } from 'lucide-react';
-import { addParticipant } from '../services/mock-data';
-import type { Participant } from '../services/mock-data';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, User, Phone, Mail, Minus, Plus, Gift, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
+
+// Interfaz para la respuesta de creación de participante de Django
+interface CreateResponse {
+  id: string;
+  nombre: string;
+  telefono: string;
+  cartones: number;
+  correo?: string;
+  pagado: boolean;
+  entregado: boolean;
+}
 
 export const CreateParticipant: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [cardsCount, setCardsCount] = useState(1);
-  const [isPaid, setIsPaid] = useState(false);
-  const [isDelivered, setIsDelivered] = useState(false);
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [correo, setCorreo] = useState('');
+  const [cartones, setCartones] = useState(1);
+  const [entregado, setEntregado] = useState(false);
 
   // Estados de error de validación
   const [nameError, setNameError] = useState<string | null>(null);
@@ -57,58 +66,53 @@ export const CreateParticipant: React.FC = () => {
   };
 
   const handleDecrement = () => {
-    if (cardsCount > 1) {
-      setCardsCount(cardsCount - 1);
+    if (cartones > 1) {
+      setCartones(cartones - 1);
     }
   };
 
   const handleIncrement = () => {
-    setCardsCount(cardsCount + 1);
+    setCartones(cartones + 1);
   };
+
+  // Mutación para realizar POST /api/participantes/
+  const createMutation = useMutation({
+    mutationFn: async (payload: {
+      nombre: string;
+      telefono: string;
+      correo: string;
+      cartones: number;
+      pagado: boolean;
+      entregado: boolean;
+    }) => {
+      const response = await api.post<CreateResponse>('/participantes/', payload);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      // Invalidar caché del listado general para que cargue el nuevo registro
+      queryClient.invalidateQueries({ queryKey: ['participants'] });
+      // Redirigir directamente al detalle del participante creado
+      navigate(`/participant/${encodeURIComponent(data.id)}`);
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const isNameValid = validateName(name);
-    const isPhoneValid = validatePhone(phone);
-    const isEmailValid = validateEmail(email);
+    const isNameValid = validateName(nombre);
+    const isPhoneValid = validatePhone(telefono);
+    const isEmailValid = validateEmail(correo);
 
     if (!isNameValid || !isPhoneValid || !isEmailValid) return;
 
-    setIsSubmitting(true);
-
-    // Simular pequeño retraso
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    const newId = `participant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    const newParticipant: Participant = {
-      id: newId,
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@ejemplo.com`,
-      cardsCount,
-      isPaid,
-      isDelivered,
-      deliveredBy: isDelivered ? 'staff_user_1' : null,
-      deliveredAt: isDelivered 
-        ? new Date().toLocaleString('es-HN', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          })
-        : null,
-      emailSent: false,
-    };
-
-    addParticipant(newParticipant);
-    setIsSubmitting(false);
-
-    // Redirigir directamente al detalle del participante recién creado para que puedan ver su QR
-    navigate(`/participant/${encodeURIComponent(newId)}`);
+    createMutation.mutate({
+      nombre: nombre.trim(),
+      telefono: telefono.trim(),
+      correo: correo.trim() || `${nombre.trim().toLowerCase().replace(/\s+/g, '.')}@ejemplo.com`,
+      cartones,
+      pagado: true, // El estado de pago siempre se guarda como True por defecto
+      entregado,
+    });
   };
 
   return (
@@ -141,14 +145,14 @@ export const CreateParticipant: React.FC = () => {
               </span>
               <input
                 type="text"
-                value={name}
+                value={nombre}
                 onChange={(e) => {
-                  setName(e.target.value);
+                  setNombre(e.target.value);
                   if (nameError) validateName(e.target.value);
                 }}
-                onBlur={() => validateName(name)}
+                onBlur={() => validateName(nombre)}
                 placeholder="Ej. Juan Pérez"
-                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-sm text-gray-850 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
+                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-sm text-gray-855 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
                   nameError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
                 }`}
               />
@@ -169,14 +173,14 @@ export const CreateParticipant: React.FC = () => {
               </span>
               <input
                 type="tel"
-                value={phone}
+                value={telefono}
                 onChange={(e) => {
-                  setPhone(e.target.value);
+                  setTelefono(e.target.value);
                   if (phoneError) validatePhone(e.target.value);
                 }}
-                onBlur={() => validatePhone(phone)}
+                onBlur={() => validatePhone(telefono)}
                 placeholder="Ej. 555-0123"
-                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-sm text-gray-850 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
+                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-sm text-gray-855 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
                   phoneError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
                 }`}
               />
@@ -197,14 +201,14 @@ export const CreateParticipant: React.FC = () => {
               </span>
               <input
                 type="email"
-                value={email}
+                value={correo}
                 onChange={(e) => {
-                  setEmail(e.target.value);
+                  setCorreo(e.target.value);
                   if (emailError) validateEmail(e.target.value);
                 }}
-                onBlur={() => validateEmail(email)}
+                onBlur={() => validateEmail(correo)}
                 placeholder="Ej. jperez@unah.edu.hn"
-                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-sm text-gray-850 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
+                className={`w-full rounded-2xl border bg-gray-50/50 py-3.5 pl-12 pr-4 text-sm text-gray-855 placeholder-gray-400 outline-none transition-all focus:border-[#00a0fe] focus:bg-white focus:ring-4 focus:ring-[#00a0fe]/10 ${
                   emailError ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200'
                 }`}
               />
@@ -231,7 +235,7 @@ export const CreateParticipant: React.FC = () => {
                 <Minus size={16} />
               </button>
               <span className="w-12 text-center text-base font-bold text-gray-800">
-                {cardsCount}
+                {cartones}
               </span>
               <button
                 type="button"
@@ -242,32 +246,6 @@ export const CreateParticipant: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
-
-        {/* Bloque de Estado de Pago (Toggle) */}
-        <div className="rounded-3xl border border-gray-150 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center justify-between gap-4">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#00a0fe]/10 text-[#00a0fe]">
-              <CreditCard size={18} />
-            </div>
-            <div>
-              <span className="block text-sm font-bold text-gray-800">Pagado</span>
-              <span className="block text-xs text-gray-400">El participante ha cancelado el monto</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsPaid(!isPaid)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-              isPaid ? 'bg-emerald-500' : 'bg-gray-200'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                isPaid ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
         </div>
 
         {/* Bloque de Estado de Entrega (Toggle) */}
@@ -283,14 +261,14 @@ export const CreateParticipant: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => setIsDelivered(!isDelivered)}
+            onClick={() => setEntregado(!entregado)}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-              isDelivered ? 'bg-teal-500' : 'bg-gray-200'
+              entregado ? 'bg-teal-500' : 'bg-gray-200'
             }`}
           >
             <span
               className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                isDelivered ? 'translate-x-5' : 'translate-x-0'
+                entregado ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>
@@ -299,10 +277,10 @@ export const CreateParticipant: React.FC = () => {
         {/* Botón de envío */}
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={createMutation.isPending}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0071ba] py-4 text-base font-semibold text-white transition-all hover:bg-[#005f9e] active:scale-[0.99] disabled:opacity-50 shadow-[0_4px_12px_rgba(0,113,186,0.2)]"
         >
-          {isSubmitting ? (
+          {createMutation.isPending ? (
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           ) : (
             'Crear Participante'

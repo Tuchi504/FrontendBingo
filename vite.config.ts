@@ -11,6 +11,16 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss()
   ],
+  server: {
+    watch: {
+      ignored: [
+        '**/backendBingoAEISv1/**',
+        '**/backendBingoAEIS/**',
+        '**/.venv/**',
+        '**/venv/**'
+      ]
+    }
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

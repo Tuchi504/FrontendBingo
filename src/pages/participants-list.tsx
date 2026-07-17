@@ -1,22 +1,40 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
-import { getParticipants } from '../services/mock-data';
-import type { Participant } from '../services/mock-data';
+import { useQuery } from '@tanstack/react-query';
+import { Search, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
+
+// Interfaz que representa el esquema real del participante de Django en español
+interface DjangoParticipant {
+  id: string;
+  nombre: string;
+  telefono: string;
+  carrera?: string;
+  no_cuenta?: string;
+  correo?: string;
+  pagado: boolean;
+  cartones: number;
+  entregado: boolean;
+  fecha_entrega?: string;
+  correo_enviado?: boolean;
+}
 
 export const ParticipantsList: React.FC = () => {
   const navigate = useNavigate();
-  const [participants] = useState<Participant[]>(() => getParticipants());
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Filtrado reactivo por nombre o teléfono
-  const filteredParticipants = participants.filter((p) => {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) return true;
-    return (
-      p.name.toLowerCase().includes(query) ||
-      p.phone.includes(query)
-    );
+  // Fetcher usando Axios mapeado a /api/participantes/
+  const fetchParticipants = async (search: string) => {
+    const response = await api.get<DjangoParticipant[]>('/participantes/', {
+      params: search ? { search } : {},
+    });
+    return response.data;
+  };
+
+  // hook useQuery de React Query reactivo a la barra de búsqueda
+  const { data: participants, isLoading, isError } = useQuery({
+    queryKey: ['participants', searchQuery],
+    queryFn: () => fetchParticipants(searchQuery),
   });
 
   return (
@@ -45,8 +63,18 @@ export const ParticipantsList: React.FC = () => {
 
       {/* Listado Vertical - padding superior para evitar superposición */}
       <div className="space-y-3 pt-2">
-        {filteredParticipants.length > 0 ? (
-          filteredParticipants.map((p) => (
+        {isLoading ? (
+          <div className="flex justify-center items-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-[#0071ba]" />
+          </div>
+        ) : isError ? (
+          <div className="text-center py-12 bg-white rounded-3xl border border-gray-150 p-6 shadow-[0_4px_12px_rgba(0,0,0,0.01)]">
+            <p className="text-sm font-semibold text-red-500">
+              Ocurrió un error al cargar los participantes del servidor.
+            </p>
+          </div>
+        ) : participants && participants.length > 0 ? (
+          participants.map((p) => (
             <div
               key={p.id}
               onClick={() => navigate(`/participant/${encodeURIComponent(p.id)}`)}
@@ -56,12 +84,12 @@ export const ParticipantsList: React.FC = () => {
               <div className="flex-1 min-w-0 pr-3">
                 <div className="flex flex-col gap-1">
                   <h3 className="font-bold text-gray-855 text-[15px] leading-snug truncate">
-                    {p.name}
+                    {p.nombre}
                   </h3>
                   
                   {/* Badge de Estado y Subdetalles en la misma fila para consistencia */}
                   <div className="flex items-center gap-2.5">
-                    {p.isDelivered ? (
+                    {p.entregado ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-600 border border-emerald-100/80 shrink-0">
                         <CheckCircle2 size={9} className="stroke-[2.5]" />
                         ENTREGADO
@@ -74,7 +102,7 @@ export const ParticipantsList: React.FC = () => {
                     )}
                     <span className="text-gray-300 text-xs">|</span>
                     <p className="text-[11px] text-gray-450 font-medium truncate">
-                      {p.phone} • {p.cardsCount} {p.cardsCount === 1 ? 'cartón' : 'cartones'}
+                      {p.telefono} • {p.cartones} {p.cartones === 1 ? 'cartón' : 'cartones'}
                     </p>
                   </div>
                 </div>
